@@ -1,186 +1,114 @@
-// ---- Crossword --------------------------------------------------------
-// Generates a small crossword daily by shuffling a word bank (seeded by
-// the day) and placing words onto a grid wherever they intersect an
-// already-placed word at a matching letter, standard crossword-style.
+// ---- Cross Math ---------------------------------------------------------
+// Two 3x3 number lattices chained together: lattice A generates normally
+// (top-left 2x2 given, bottom-right corner solved by matching its row and
+// column equation simultaneously), then lattice B reuses A's corner as
+// ITS own top-left "given" anchor and extends diagonally from there. The
+// result is one connected, organically-shaped interlocking structure
+// (not two separate puzzles) while each lattice individually uses the
+// exact same proven-reliable generation technique.
 
-const XW_WORDS = [
-  ["APPLE", "Fruit that keeps the doctor away"], ["RIVER", "Flowing body of fresh water"],
-  ["TIGER", "Striped big cat"], ["CLOUD", "Fluffy sky feature"], ["HOUSE", "Where you live"],
-  ["MUSIC", "Art of arranging sound"], ["BREAD", "Baked staple food"], ["CHESS", "Board game with a king"],
-  ["EARTH", "Our home planet"], ["LEMON", "Sour yellow citrus"], ["OCEAN", "Vast body of salt water"],
-  ["PLANT", "Living thing that photosynthesizes"], ["STONE", "Small piece of rock"], ["TRAIN", "Rail transport"],
-  ["WATER", "Chemical formula H2O"], ["BEACH", "Sandy shore"], ["CANDY", "Sweet treat"], ["DANCE", "Move rhythmically to music"],
-  ["EAGLE", "Large bird of prey"], ["FENCE", "Barrier around a yard"], ["GRAPE", "Fruit that grows in bunches"],
-  ["HONEY", "Sweet substance made by bees"], ["IMAGE", "Picture or likeness"], ["JUICE", "Drink pressed from fruit"],
-  ["KNIFE", "Cutting utensil"], ["MONEY", "Currency"], ["NIGHT", "Opposite of day"],
-  ["PAPER", "Material for writing"], ["QUEEN", "Female monarch"], ["ROBOT", "Mechanical automaton"],
-  ["SUGAR", "Sweetener from cane or beet"], ["TABLE", "Furniture with a flat top"], ["UNCLE", "Your parent's brother"],
-  ["VOICE", "Sound produced by vocal cords"], ["WHEEL", "Round device that rotates"], ["ZEBRA", "Striped African animal"],
-  ["BRAIN", "Organ used for thinking"], ["CROWN", "Royal head ornament"], ["DRESS", "Garment worn by women"],
-  ["FLAME", "Visible part of fire"], ["GHOST", "Spooky spirit"], ["HEART", "Organ that pumps blood"],
-  ["IVORY", "Material from elephant tusks"], ["JOKER", "Playing card with a jester"], ["MANGO", "Tropical stone fruit"],
-  ["NOVEL", "Long work of fiction"], ["OASIS", "Watering hole in the desert"], ["PEACH", "Fuzzy orange-pink fruit"],
-  ["RADIO", "Device for broadcast audio"], ["SNAKE", "Legless reptile"], ["TOAST", "Browned bread"],
-  ["CAT", "Common house pet"], ["DOG", "Loyal pet, man's best friend"], ["SUN", "Star at the center of our solar system"],
-  ["SEA", "Large body of salt water"], ["ICE", "Frozen water"], ["OWL", "Nocturnal bird"],
-  ["ANT", "Tiny hardworking insect"], ["BEE", "Buzzing pollinator"], ["FOX", "Cunning red-furred animal"],
-  ["EGG", "Breakfast staple laid by hens"],
-];
+const CM_COIN_CONFIG = { max: 70, min: 12, par: 360 };
+const CM_CAP = 99;
+const CM_LATTICES = ["a", "b"];
+const CM_GIVEN_CELLS = ["0,0", "0,1", "1,0", "1,1"];
+// Lattice A's corner (2,2) is reused as lattice B's given anchor, so it
+// renders as a fixed/given tile, not a separate editable input — it must
+// NOT be counted as something the player still needs to type into.
+const CM_BLANK_CELLS_BY_LATTICE = {
+  a: ["0,2", "1,2", "2,0", "2,1"],
+  b: ["0,2", "1,2", "2,0", "2,1", "2,2"],
+};
+// where each lattice's local (0,0) sits in the shared combined grid
+const CM_OFFSET = { a: { row: 0, col: 0 }, b: { row: 4, col: 4 } };
 
-const XW_COIN_CONFIG = { max: 60, min: 10, par: 300 };
-
-const CrosswordGame = (() => {
-  let puzzle = null; // { cells, width, height, minRow, minCol, words }
-  let userGrid = null; // 2D array of letters typed so far
-  let activeCell = null; // {r,c}
-  let activeDir = "across";
+const CrossMathGame = (() => {
+  let lattices = null; // { a: {values, ops}, b: {values, ops} }
+  let userValues = null; // "a:0,2" -> string
   let solved = false;
   let elapsedMs = 0;
   let runStart = null;
   let timerIntervalId = null;
   let lastCoinsEarned = 0;
   let justSetRecord = false;
+  let hintsUsed = 0;
   let attached = false;
 
+  function candidateOps(a, b) {
+    const opts = [];
+    if (a + b <= CM_CAP) opts.push({ op: "+", result: a + b });
+    if (a * b <= CM_CAP) opts.push({ op: "\u00d7", result: a * b });
+    if (a > b) opts.push({ op: "-", result: a - b });
+    return opts;
+  }
+
   function shuffle(arr, rng) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
+    for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return a;
+    return arr;
   }
 
-  function buildRaw(rng) {
-    const GRID = 15;
-    const OFFSET = 7;
-    const cells = {};
-    const placed = [];
-    const key = (r, c) => `${r},${c}`;
+  // forcedA00, when given, chains this lattice onto a previous one by
+  // reusing its value as this lattice's own top-left given cell instead
+  // of rolling a fresh random one.
+  function tryGenerate(rng, forcedA00) {
+    const A00 = forcedA00 !== undefined ? forcedA00 : 1 + Math.floor(rng() * 9);
+    const A01 = 1 + Math.floor(rng() * 9);
+    const A10 = 1 + Math.floor(rng() * 9);
+    const A11 = 1 + Math.floor(rng() * 9);
 
-    const order = shuffle(XW_WORDS, rng);
-    const first = order[0];
-    const startCol = OFFSET - Math.floor(first[0].length / 2);
-    for (let i = 0; i < first[0].length; i++) cells[key(OFFSET, startCol + i)] = first[0][i];
-    placed.push({ word: first[0], clue: first[1], row: OFFSET, col: startCol, dir: "across" });
+    const row0Opts = candidateOps(A00, A01); if (!row0Opts.length) return null;
+    const row1Opts = candidateOps(A10, A11); if (!row1Opts.length) return null;
+    const col0Opts = candidateOps(A00, A10); if (!col0Opts.length) return null;
+    const col1Opts = candidateOps(A01, A11); if (!col1Opts.length) return null;
 
-    for (let w = 1; w < order.length; w++) {
-      const [word, clue] = order[w];
-      if (placed.some((p) => p.word === word)) continue;
-      const options = [];
+    const row0 = row0Opts[Math.floor(rng() * row0Opts.length)];
+    const row1 = row1Opts[Math.floor(rng() * row1Opts.length)];
+    const col0 = col0Opts[Math.floor(rng() * col0Opts.length)];
+    const col1 = col1Opts[Math.floor(rng() * col1Opts.length)];
 
-      for (const p of placed) {
-        for (let i = 0; i < p.word.length; i++) {
-          const letter = p.word[i];
-          const pr = p.dir === "across" ? p.row : p.row + i;
-          const pc = p.dir === "across" ? p.col + i : p.col;
-          for (let j = 0; j < word.length; j++) {
-            if (word[j] !== letter) continue;
-            const dir = p.dir === "across" ? "down" : "across";
-            const row = dir === "across" ? pr : pr - j;
-            const col = dir === "across" ? pc - j : pc;
-            if (row < 0 || col < 0) continue;
-            const endRow = dir === "across" ? row : row + word.length - 1;
-            const endCol = dir === "across" ? col + word.length - 1 : col;
-            if (endRow >= GRID || endCol >= GRID) continue;
+    const N02 = row0.result, N12 = row1.result, N20 = col0.result, N21 = col1.result;
+    const rowOptions = shuffle(candidateOps(N20, N21), rng);
+    const colOptions = shuffle(candidateOps(N02, N12), rng);
 
-            let valid = true;
-            for (let k = 0; k < word.length && valid; k++) {
-              const rr = dir === "across" ? row : row + k;
-              const cc = dir === "across" ? col + k : col;
-              const existing = cells[key(rr, cc)];
-              if (existing !== undefined && existing !== word[k]) valid = false;
-            }
-            if (!valid) continue;
-
-            const beforeR = dir === "across" ? row : row - 1;
-            const beforeC = dir === "across" ? col - 1 : col;
-            const afterR = dir === "across" ? row : row + word.length;
-            const afterC = dir === "across" ? col + word.length : col;
-            if (cells[key(beforeR, beforeC)] !== undefined) continue;
-            if (cells[key(afterR, afterC)] !== undefined) continue;
-
-            options.push({ row, col, dir });
-          }
-        }
-      }
-      if (options.length === 0) continue;
-      const choice = options[Math.floor(rng() * options.length)];
-      for (let k = 0; k < word.length; k++) {
-        const rr = choice.dir === "across" ? choice.row : choice.row + k;
-        const cc = choice.dir === "across" ? choice.col + k : choice.col;
-        cells[key(rr, cc)] = word[k];
-      }
-      placed.push({ word, clue, row: choice.row, col: choice.col, dir: choice.dir });
-      if (placed.length >= 10) break;
-    }
-
-    return { cells, placed };
-  }
-
-  function trimAndNumber(raw) {
-    const coords = Object.keys(raw.cells).map((k) => k.split(",").map(Number));
-    const minRow = Math.min(...coords.map((c) => c[0]));
-    const maxRow = Math.max(...coords.map((c) => c[0]));
-    const minCol = Math.min(...coords.map((c) => c[1]));
-    const maxCol = Math.max(...coords.map((c) => c[1]));
-    const height = maxRow - minRow + 1;
-    const width = maxCol - minCol + 1;
-
-    const letterAt = (r, c) => raw.cells[`${r},${c}`];
-    const hasCell = (r, c) => letterAt(r, c) !== undefined;
-
-    // number cells: any cell that starts an across or down word
-    const numbers = {};
-    let n = 1;
-    for (let r = minRow; r <= maxRow; r++) {
-      for (let c = minCol; c <= maxCol; c++) {
-        if (!hasCell(r, c)) continue;
-        const startsAcross = !hasCell(r, c - 1) && hasCell(r, c + 1);
-        const startsDown = !hasCell(r - 1, c) && hasCell(r + 1, c);
-        if (startsAcross || startsDown) {
-          numbers[`${r},${c}`] = n++;
+    for (const ro of rowOptions) {
+      for (const co of colOptions) {
+        if (ro.result === co.result) {
+          return {
+            values: { "0,0": A00, "0,1": A01, "1,0": A10, "1,1": A11, "0,2": N02, "1,2": N12, "2,0": N20, "2,1": N21, "2,2": ro.result },
+            ops: { row0: row0.op, row1: row1.op, row2: ro.op, col0: col0.op, col1: col1.op, col2: co.op },
+          };
         }
       }
     }
-
-    const words = raw.placed.map((p) => ({
-      ...p,
-      number: numbers[`${p.row},${p.col}`],
-      rowT: p.row - minRow,
-      colT: p.col - minCol,
-    }));
-
-    return { minRow, minCol, width, height, letterAt, hasCell, numbers, words };
+    return null;
   }
 
-  function generatePuzzle() {
-    const seed = seedFor("crossword");
-    const rng = seededRandom(seed);
-    const raw = buildRaw(rng);
-    return trimAndNumber(raw);
+  function generateLattice(suffix, forcedA00) {
+    const rng = seededRandom(seedFor(`crossmath-${suffix}`));
+    for (let i = 0; i < 800; i++) {
+      const r = tryGenerate(rng, forcedA00);
+      if (r) return r;
+    }
+    // fallback (astronomically unlikely): trivial all-ones puzzle
+    const base = forcedA00 !== undefined ? forcedA00 : 1;
+    return {
+      values: { "0,0": base, "0,1": 1, "1,0": 1, "1,1": 1, "0,2": base + 1, "1,2": 2, "2,0": base + 1, "2,1": 2, "2,2": (base + 1) + 2 },
+      ops: { row0: "+", row1: "+", row2: "+", col0: "+", col1: "+", col2: "+" },
+    };
   }
 
   function ensureLoaded() {
-    if (puzzle) return;
-    puzzle = generatePuzzle();
-    userGrid = Array.from({ length: puzzle.height }, () => new Array(puzzle.width).fill(""));
-    solved = isCompletedToday("crossword");
-    activeDir = "across";
-    const first = puzzle.words.find((w) => w.dir === "across") || puzzle.words[0];
-    activeCell = { r: first.rowT, c: first.colT };
-  }
-
-  function wordAt(r, c, dir) {
-    return puzzle.words.find((w) => {
-      if (w.dir !== dir) return false;
-      if (dir === "across") return w.rowT === r && c >= w.colT && c < w.colT + w.word.length;
-      return w.colT === c && r >= w.rowT && r < w.rowT + w.word.length;
+    if (lattices) return;
+    const a = generateLattice("a");
+    const b = generateLattice("b", a.values["2,2"]);
+    lattices = { a, b };
+    userValues = {};
+    CM_LATTICES.forEach((L) => {
+      CM_BLANK_CELLS_BY_LATTICE[L].forEach((k) => { userValues[`${L}:${k}`] = ""; });
     });
-  }
-
-  function currentWord() {
-    return wordAt(activeCell.r, activeCell.c, activeDir) || wordAt(activeCell.r, activeCell.c, activeDir === "across" ? "down" : "across");
+    solved = isCompletedToday("crossmath");
   }
 
   function getElapsedMs() { return elapsedMs + (runStart ? Date.now() - runStart : 0); }
@@ -199,100 +127,91 @@ const CrosswordGame = (() => {
   }
 
   function updateTimerDisplay() {
-    const el = document.getElementById("xwTimer");
-    const bestEl = document.getElementById("xwBest");
+    const el = document.getElementById("cmTimer");
+    const bestEl = document.getElementById("cmBest");
     if (el) el.textContent = formatTime(getElapsedMs());
     if (bestEl) {
-      const best = getBestTime("crossword");
+      const best = getBestTime("crossmath");
       bestEl.textContent = best === null ? "\u2013" : formatTime(best);
     }
   }
 
+  function latticeSolved(L) {
+    return CM_BLANK_CELLS_BY_LATTICE[L].every((k) => parseInt(userValues[`${L}:${k}`], 10) === lattices[L].values[k]);
+  }
+
   function checkWin() {
-    for (const w of puzzle.words) {
-      for (let k = 0; k < w.word.length; k++) {
-        const rr = w.dir === "across" ? w.rowT : w.rowT + k;
-        const cc = w.dir === "across" ? w.colT + k : w.colT;
-        if (userGrid[rr][cc] !== w.word[k]) return false;
-      }
-    }
-    return true;
+    return CM_LATTICES.every((L) => latticeSolved(L));
   }
 
   function render() {
-    const grid = document.getElementById("xwGrid");
-    grid.style.setProperty("--xw-cols", puzzle.width);
-    grid.style.setProperty("--xw-rows", puzzle.height);
+    const grid = document.getElementById("cmGrid");
     grid.innerHTML = "";
 
-    const activeWord = currentWord();
+    // build one shared 9x9 role map combining both lattices; they meet
+    // at exactly one cell (A's corner === B's given anchor), which both
+    // passes agree on since it's the literal same value.
+    const cellRole = {};
 
-    for (let r = 0; r < puzzle.height; r++) {
-      for (let c = 0; c < puzzle.width; c++) {
+    CM_LATTICES.forEach((L) => {
+      const puzzle = lattices[L];
+      const offR = CM_OFFSET[L].row, offC = CM_OFFSET[L].col;
+
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const row = offR + 2 * i, col = offC + 2 * j;
+          const key = `${i},${j}`;
+          const isGiven = CM_GIVEN_CELLS.includes(key);
+          const uKey = `${L}:${key}`;
+          cellRole[`${row},${col}`] = {
+            type: "num",
+            given: isGiven,
+            value: isGiven ? puzzle.values[key] : (solved ? puzzle.values[key] : userValues[uKey]),
+            editKey: isGiven ? null : uKey,
+            correct: isGiven || solved || (userValues[uKey] !== "" && parseInt(userValues[uKey], 10) === puzzle.values[key]),
+          };
+        }
+      }
+      for (let i = 0; i < 3; i++) {
+        const opText = i === 0 ? puzzle.ops.row0 : i === 1 ? puzzle.ops.row1 : puzzle.ops.row2;
+        cellRole[`${offR + 2 * i},${offC + 1}`] = { type: "sym", value: opText };
+        cellRole[`${offR + 2 * i},${offC + 3}`] = { type: "sym", value: "=" };
+      }
+      for (let j = 0; j < 3; j++) {
+        const opText = j === 0 ? puzzle.ops.col0 : j === 1 ? puzzle.ops.col1 : puzzle.ops.col2;
+        cellRole[`${offR + 1},${offC + 2 * j}`] = { type: "sym", value: opText };
+        cellRole[`${offR + 3},${offC + 2 * j}`] = { type: "sym", value: "=" };
+      }
+    });
+
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const role = cellRole[`${r},${c}`];
         const cell = document.createElement("div");
-        if (!puzzle.hasCell(r + puzzle.minRow, c + puzzle.minCol)) {
-          cell.className = "xwCell xwBlock";
-          grid.appendChild(cell);
-          continue;
+        if (!role) { cell.className = "cmCell cmBlank"; grid.appendChild(cell); continue; }
+
+        if (role.type === "sym") {
+          cell.className = "cmCell cmSym";
+          cell.textContent = role.value;
+        } else if (role.given) {
+          cell.className = "cmCell cmGiven";
+          cell.textContent = role.value;
+        } else {
+          cell.className = "cmCell cmInput" + (role.correct && role.value !== "" ? " cmCorrect" : "");
+          const input = document.createElement("input");
+          input.type = "tel";
+          input.inputMode = "numeric";
+          input.maxLength = 2;
+          input.value = role.value || "";
+          input.disabled = solved;
+          input.dataset.key = role.editKey;
+          cell.appendChild(input);
         }
-        cell.className = "xwCell";
-        cell.dataset.r = r;
-        cell.dataset.c = c;
-
-        const num = puzzle.numbers[`${r + puzzle.minRow},${c + puzzle.minCol}`];
-        if (num) {
-          const numEl = document.createElement("span");
-          numEl.className = "xwNum";
-          numEl.textContent = num;
-          cell.appendChild(numEl);
-        }
-
-        const letterEl = document.createElement("span");
-        letterEl.className = "xwLetter";
-        letterEl.textContent = userGrid[r][c];
-        cell.appendChild(letterEl);
-
-        if (activeCell.r === r && activeCell.c === c) cell.classList.add("xwActive");
-        else if (activeWord && (
-          (activeWord.dir === "across" && activeWord.rowT === r && c >= activeWord.colT && c < activeWord.colT + activeWord.word.length) ||
-          (activeWord.dir === "down" && activeWord.colT === c && r >= activeWord.rowT && r < activeWord.rowT + activeWord.word.length)
-        )) cell.classList.add("xwInWord");
-
-        if (solved) cell.classList.add("xwSolved");
-
         grid.appendChild(cell);
       }
     }
 
-    const clueBar = document.getElementById("xwClueBar");
-    if (activeWord) {
-      clueBar.textContent = `${activeWord.number} ${activeWord.dir === "across" ? "Across" : "Down"}: ${activeWord.clue}`;
-    }
-
-    const acrossList = document.getElementById("xwAcrossList");
-    const downList = document.getElementById("xwDownList");
-    acrossList.innerHTML = "";
-    downList.innerHTML = "";
-    puzzle.words
-      .filter((w) => w.dir === "across")
-      .sort((a, b) => a.number - b.number)
-      .forEach((w) => {
-        const li = document.createElement("li");
-        li.textContent = `${w.number}. ${w.clue}`;
-        li.addEventListener("click", () => { activeCell = { r: w.rowT, c: w.colT }; activeDir = "across"; render(); });
-        acrossList.appendChild(li);
-      });
-    puzzle.words
-      .filter((w) => w.dir === "down")
-      .sort((a, b) => a.number - b.number)
-      .forEach((w) => {
-        const li = document.createElement("li");
-        li.textContent = `${w.number}. ${w.clue}`;
-        li.addEventListener("click", () => { activeCell = { r: w.rowT, c: w.colT }; activeDir = "down"; render(); });
-        downList.appendChild(li);
-      });
-
-    const winBanner = document.getElementById("xwWinBanner");
+    const winBanner = document.getElementById("cmWinBanner");
     if (solved) {
       const record = justSetRecord ? '<div class="clWinRecord">New best time</div>' : "";
       winBanner.innerHTML = `
@@ -306,83 +225,58 @@ const CrosswordGame = (() => {
     updateTimerDisplay();
   }
 
-  function moveTo(r, c) {
-    if (r < 0 || c < 0 || r >= puzzle.height || c >= puzzle.width) return;
-    if (!puzzle.hasCell(r + puzzle.minRow, c + puzzle.minCol)) return;
-    activeCell = { r, c };
+  function checkAndHandleWin() {
+    if (!checkWin()) return;
+    stopTimer();
+    const elapsed = getElapsedMs();
+    const raw = computeCoinsGeneric(CM_COIN_CONFIG, elapsed);
+    lastCoinsEarned = Math.max(CM_COIN_CONFIG.min, raw - hintsUsed * 6);
+    solved = true;
+    justSetRecord = recordBestTimeIfBetter("crossmath", elapsed);
+    addCoins(lastCoinsEarned);
+    markCompletedToday("crossmath");
+    if (typeof refreshHomeStatuses === "function") refreshHomeStatuses();
   }
 
-  function handleCellClick(r, c) {
-    if (solved) return;
-    if (activeCell.r === r && activeCell.c === c) {
-      activeDir = activeDir === "across" ? "down" : "across";
-    } else {
-      activeCell = { r, c };
-      const hasAcross = wordAt(r, c, "across");
-      const hasDown = wordAt(r, c, "down");
-      if (activeDir === "across" && !hasAcross) activeDir = "down";
-      if (activeDir === "down" && !hasDown) activeDir = "across";
+  function handleInput(uKey, rawValue) {
+    const digits = rawValue.replace(/[^0-9]/g, "").slice(0, 2);
+    userValues[uKey] = digits;
+    checkAndHandleWin();
+    render();
+    if (!solved) {
+      const nextInput = document.querySelector(`input[data-key="${uKey}"]`);
+      if (nextInput) { nextInput.focus(); nextInput.setSelectionRange(digits.length, digits.length); }
     }
+  }
+
+  // Reveals every blank in whichever lattice isn't fully correct yet.
+  function useHint() {
+    if (solved) return;
+    const target = CM_LATTICES.find((L) => !latticeSolved(L));
+    if (!target) return;
+
+    CM_BLANK_CELLS_BY_LATTICE[target].forEach((k) => {
+      userValues[`${target}:${k}`] = String(lattices[target].values[k]);
+    });
+    hintsUsed += 1;
+
+    checkAndHandleWin();
     render();
   }
 
-  function advance(step) {
-    const w = currentWord();
-    if (!w) return;
-    if (w.dir === "across") moveTo(activeCell.r, activeCell.c + step);
-    else moveTo(activeCell.r + step, activeCell.c);
-  }
-
-  function handleKey(key) {
-    if (solved) return;
-    if (/^[a-zA-Z]$/.test(key)) {
-      userGrid[activeCell.r][activeCell.c] = key.toUpperCase();
-      advance(1);
-      if (checkWin()) {
-        stopTimer();
-        const elapsed = getElapsedMs();
-        lastCoinsEarned = computeCoinsGeneric(XW_COIN_CONFIG, elapsed);
-        solved = true;
-        justSetRecord = recordBestTimeIfBetter("crossword", elapsed);
-        addCoins(lastCoinsEarned);
-        markCompletedToday("crossword");
-        if (typeof refreshHomeStatuses === "function") refreshHomeStatuses();
-      }
-      render();
-    } else if (key === "Backspace") {
-      if (userGrid[activeCell.r][activeCell.c]) {
-        userGrid[activeCell.r][activeCell.c] = "";
-      } else {
-        advance(-1);
-        userGrid[activeCell.r][activeCell.c] = "";
-      }
-      render();
-    } else if (key === "ArrowRight") { moveTo(activeCell.r, activeCell.c + 1); activeDir = "across"; render(); }
-    else if (key === "ArrowLeft") { moveTo(activeCell.r, activeCell.c - 1); activeDir = "across"; render(); }
-    else if (key === "ArrowDown") { moveTo(activeCell.r + 1, activeCell.c); activeDir = "down"; render(); }
-    else if (key === "ArrowUp") { moveTo(activeCell.r - 1, activeCell.c); activeDir = "down"; render(); }
-  }
-
   function attachEvents() {
-    const grid = document.getElementById("xwGrid");
-    grid.addEventListener("click", (e) => {
-      const cellEl = e.target.closest(".xwCell");
-      if (!cellEl || cellEl.classList.contains("xwBlock")) return;
-      handleCellClick(parseInt(cellEl.dataset.r, 10), parseInt(cellEl.dataset.c, 10));
-      const hidden = document.getElementById("xwHiddenInput");
-      hidden.focus();
+    document.getElementById("cmGrid").addEventListener("input", (e) => {
+      if (e.target.tagName === "INPUT") handleInput(e.target.dataset.key, e.target.value);
     });
-
-    const hidden = document.getElementById("xwHiddenInput");
-    hidden.addEventListener("keydown", (e) => {
-      if (e.key.length === 1 || e.key === "Backspace" || e.key.startsWith("Arrow")) {
-        e.preventDefault();
-        handleKey(e.key);
-      }
+    document.getElementById("cmClearBtn").addEventListener("click", () => {
+      if (solved) return;
+      CM_LATTICES.forEach((L) => {
+        CM_BLANK_CELLS_BY_LATTICE[L].forEach((k) => { userValues[`${L}:${k}`] = ""; });
+      });
+      render();
     });
-
-    document.getElementById("xwGrid").addEventListener("pointerdown", () => {
-      document.getElementById("xwHiddenInput").focus();
+    document.getElementById("cmHintBtn").addEventListener("click", () => {
+      useHint();
     });
   }
 
