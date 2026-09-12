@@ -301,6 +301,17 @@ main {
   box-shadow: var(--shadow-md);
 }
 
+.levelTab.locked {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+.lockIcon {
+  font-size: 11px;
+  vertical-align: 1px;
+}
+
 .clGrid {
   display: grid;
   grid-template-columns: repeat(var(--cl-size), 1fr);
