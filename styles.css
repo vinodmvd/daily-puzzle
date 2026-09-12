@@ -367,7 +367,31 @@ main {
 
 /* ---- Crossword ---- */
 
+.clueNav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.clueNavBtn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.clueNavBtn:active { transform: scale(0.92); }
+
 .clueBar {
+  flex: 1;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--ink);
@@ -375,43 +399,51 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   padding: 10px 14px;
-  margin-bottom: 10px;
   box-shadow: var(--shadow-sm);
   min-height: 20px;
 }
 
 .xwGrid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(var(--xw-cols), 1fr);
   grid-template-rows: repeat(var(--xw-rows), 1fr);
-  gap: 2px;
+  gap: 3px;
   aspect-ratio: var(--xw-cols) / var(--xw-rows);
 }
 
 .xwCell {
   position: relative;
   background: var(--card);
-  border: 1px solid var(--line-strong);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 7px;
+  box-shadow: 0 2px 0 var(--line-strong), inset 0 1px 0 rgba(255,255,255,0.8);
+  transition: background 0.1s ease;
 }
 
 .xwBlock {
-  background: transparent;
-  border: none;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--line) 0px, var(--line) 3px,
+    transparent 3px, transparent 7px
+  );
+  box-shadow: none;
   cursor: default;
+  border-radius: 7px;
+  opacity: 0.6;
 }
 
 .xwNum {
   position: absolute;
-  top: 1px;
-  left: 2px;
+  top: 2px;
+  left: 3px;
   font-size: clamp(6px, 1.6vw, 9px);
   color: var(--text-sub);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .xwLetter {
@@ -420,9 +452,18 @@ main {
   color: var(--text-main);
 }
 
-.xwInWord { background: rgba(201, 162, 39, 0.16); }
-.xwActive { background: rgba(201, 162, 39, 0.4); }
+.xwActive { background: var(--mustard); box-shadow: 0 2px 0 rgba(0,0,0,0.2); }
+.xwActive .xwLetter { color: #fff; }
+.xwActive .xwNum { color: rgba(255,255,255,0.85); }
 .xwSolved .xwLetter { color: var(--teal); }
+
+.xwActiveBracket {
+  position: absolute;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
 
 .hiddenInput {
   position: absolute;
@@ -470,8 +511,8 @@ main {
 
 .cmGrid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(5, 1fr);
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
   gap: 3px;
   aspect-ratio: 1 / 1;
 }
@@ -481,8 +522,9 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(11px, 3.6vw, 17px);
+  font-size: clamp(9px, 3vw, 15px);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .cmBlank { background: transparent; }
@@ -490,22 +532,25 @@ main {
 .cmSym {
   background: transparent;
   color: var(--text-sub);
-  font-size: clamp(12px, 3.4vw, 16px);
+  font-size: clamp(10px, 2.8vw, 14px);
+  font-weight: 600;
 }
 
 .cmGiven {
-  background: var(--well);
-  color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .cmInput {
   background: var(--card);
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px dashed var(--line-strong);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .cmInput.cmCorrect {
   background: rgba(47, 111, 98, 0.12);
-  border-color: var(--teal);
+  border: 1.5px solid var(--teal);
 }
 
 .cmInput input {
@@ -517,7 +562,8 @@ main {
   font-size: inherit;
   font-weight: inherit;
   font-family: inherit;
-  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
   padding: 0;
 }
 
