@@ -1,0 +1,491 @@
+:root {
+  --ink: #1B2A4A;
+  --ink-light: #2C3F68;
+  --paper: #F5F3EE;
+  --card: #FFFFFF;
+  --well: #ECE8DE;
+  --mustard: #C9A227;
+  --teal: #2F6F62;
+  --line: #E4E0D4;
+  --line-strong: #D3CDBC;
+  --text-main: #21262D;
+  --text-sub: #6B7280;
+  --shadow-sm: 0 1px 2px rgba(27, 42, 74, 0.06);
+  --shadow-md: 0 4px 14px rgba(27, 42, 74, 0.08);
+  --radius-card: 16px;
+  --radius-control: 12px;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* ---- Top bar ---- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg, var(--ink) 0%, var(--ink-light) 100%);
+  color: #F5F3EE;
+  padding: calc(env(safe-area-inset-top) + 14px) 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 2px 10px rgba(27, 42, 74, 0.18);
+}
+
+.topbar h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  font-size: 21px;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #F5F3EE;
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px 8px 6px 0;
+  cursor: pointer;
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+
+.back-btn:active { opacity: 0.6; }
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 18px 56px;
+}
+
+.view[hidden] { display: none; }
+
+/* ---- Home ---- */
+
+.dateLabel {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0 0 14px;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.statsBar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.statChip {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 12px 6px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.statValue {
+  display: block;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.statLabel {
+  display: block;
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.tileList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tile:active {
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+.tileIcon {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.12);
+}
+
+.icon-crossword { background: var(--ink); }
+.icon-colorlink { background: var(--teal); }
+.icon-crossmath { background: var(--mustard); }
+
+.tileText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tileName {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tileSub {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.tileStatus {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tileStatus.done {
+  background: rgba(47, 111, 98, 0.14);
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Shared: per-game stats row, board wrap, win banner, action button ---- */
+
+.statsRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0 0 12px;
+  padding: 0 2px;
+}
+
+.statsRow strong {
+  color: var(--text-main);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.puzzleBoard {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.winBanner {
+  position: absolute;
+  inset: 0;
+  background: rgba(245, 243, 238, 0.97);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  padding: 20px;
+}
+
+.clWinTitle {
+  font-family: Georgia, serif;
+  font-size: 21px;
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.clWinDetail {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.clWinRecord {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mustard);
+  letter-spacing: 0.2px;
+}
+
+.actionBtn {
+  display: block;
+  margin: 16px auto 0;
+  padding: 11px 26px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.1s ease;
+}
+
+.actionBtn:active { transform: scale(0.96); }
+
+/* ---- Color Link ---- */
+
+.levelTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.levelTab {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-sub);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.levelTab.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.clGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--cl-size), 1fr);
+  gap: 3px;
+  aspect-ratio: 1 / 1;
+  touch-action: none;
+  user-select: none;
+}
+
+.clCell {
+  position: relative;
+  background: var(--well);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(27,42,74,0.04);
+}
+
+.clDot {
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25), 0 0 0 2px rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(9px, 3vw, 14px);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+}
+
+/* ---- Crossword ---- */
+
+.clueBar {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-sm);
+  min-height: 20px;
+}
+
+.xwGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--xw-cols), 1fr);
+  grid-template-rows: repeat(var(--xw-rows), 1fr);
+  gap: 2px;
+  aspect-ratio: var(--xw-cols) / var(--xw-rows);
+}
+
+.xwCell {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.xwBlock {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.xwNum {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: clamp(6px, 1.6vw, 9px);
+  color: var(--text-sub);
+  font-weight: 600;
+}
+
+.xwLetter {
+  font-size: clamp(11px, 3.6vw, 18px);
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.xwInWord { background: rgba(201, 162, 39, 0.16); }
+.xwActive { background: rgba(201, 162, 39, 0.4); }
+.xwSolved .xwLetter { color: var(--teal); }
+
+.hiddenInput {
+  position: absolute;
+  opacity: 0;
+  height: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.clueLists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.clueColumn h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.clueColumn ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clueColumn li {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.clueColumn li:active { color: var(--teal); }
+
+/* ---- Cross Math ---- */
+
+.cmGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 3px;
+  aspect-ratio: 1 / 1;
+}
+
+.cmCell {
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(11px, 3.6vw, 17px);
+  font-weight: 700;
+}
+
+.cmBlank { background: transparent; }
+
+.cmSym {
+  background: transparent;
+  color: var(--text-sub);
+  font-size: clamp(12px, 3.4vw, 16px);
+}
+
+.cmGiven {
+  background: var(--well);
+  color: var(--ink);
+}
+
+.cmInput {
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+}
+
+.cmInput.cmCorrect {
+  background: rgba(47, 111, 98, 0.12);
+  border-color: var(--teal);
+}
+
+.cmInput input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  color: var(--text-main);
+  padding: 0;
+}
+
+.cmInput input:focus { outline: none; }

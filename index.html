@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Daily Puzzles</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Puzzles">
+<meta name="theme-color" content="#1B2A4A">
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button id="backBtn" class="back-btn" hidden aria-label="Back to home">&#8592;</button>
+  <h1 id="pageTitle">Daily puzzles</h1>
+</header>
+
+<main id="app">
+
+  <!-- HOME -->
+  <section id="view-home" class="view">
+    <p class="dateLabel" id="dateLabel"></p>
+
+    <div class="statsBar">
+      <div class="statChip">
+        <span class="statValue" id="streakValue">0</span>
+        <span class="statLabel">day streak</span>
+      </div>
+      <div class="statChip">
+        <span class="statValue" id="coinsValue">0</span>
+        <span class="statLabel">coins</span>
+      </div>
+      <div class="statChip">
+        <span class="statValue" id="freezeValue">2</span>
+        <span class="statLabel">freeze left</span>
+      </div>
+    </div>
+
+    <div class="tileList">
+
+      <button class="tile" data-view="crossword">
+        <span class="tileIcon icon-crossword" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <path d="M3 9h18M3 15h18M9 3v18M15 3v18"></path>
+          </svg>
+        </span>
+        <span class="tileText">
+          <span class="tileName">Daily crossword</span>
+          <span class="tileSub">A fresh grid every day</span>
+        </span>
+        <span class="tileStatus" id="status-crossword"></span>
+      </button>
+
+      <button class="tile" data-view="colorlink">
+        <span class="tileIcon icon-colorlink" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="2.4"></circle>
+            <circle cx="18" cy="18" r="2.4"></circle>
+            <path d="M8.3 6.6h7A2.7 2.7 0 0 1 18 9.3v3"></path>
+          </svg>
+        </span>
+        <span class="tileText">
+          <span class="tileName">Daily color link</span>
+          <span class="tileSub">Connect the dots, no crossing</span>
+        </span>
+        <span class="tileStatus" id="status-colorlink"></span>
+      </button>
+
+      <button class="tile" data-view="crossmath">
+        <span class="tileIcon icon-crossmath" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v6M9 8h6M5 17h4M17 17h-4M5 17l4-4M15 13l4 4"></path>
+          </svg>
+        </span>
+        <span class="tileText">
+          <span class="tileName">Daily cross math</span>
+          <span class="tileSub">Numbers that add up</span>
+        </span>
+        <span class="tileStatus" id="status-crossmath"></span>
+      </button>
+
+    </div>
+  </section>
+
+  <!-- CROSSWORD -->
+  <section id="view-crossword" class="view" hidden>
+    <div class="statsRow">
+      <span>Time: <strong id="xwTimer">0:00</strong></span>
+      <span>Best: <strong id="xwBest">&ndash;</strong></span>
+    </div>
+    <div class="clueBar" id="xwClueBar">&nbsp;</div>
+    <div class="puzzleBoard">
+      <div class="xwGrid" id="xwGrid"></div>
+      <div class="winBanner" id="xwWinBanner" hidden></div>
+    </div>
+    <input id="xwHiddenInput" class="hiddenInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" />
+    <div class="clueLists">
+      <div class="clueColumn">
+        <h3>Across</h3>
+        <ul id="xwAcrossList"></ul>
+      </div>
+      <div class="clueColumn">
+        <h3>Down</h3>
+        <ul id="xwDownList"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR LINK -->
+  <section id="view-colorlink" class="view" hidden>
+    <div class="levelTabs" id="clLevelTabs"></div>
+    <div class="statsRow">
+      <span>Time: <strong id="clTimer">0:00</strong></span>
+      <span>Best: <strong id="clBest">&ndash;</strong></span>
+    </div>
+    <div class="puzzleBoard">
+      <div class="clGrid" id="clGrid"></div>
+      <div class="winBanner" id="clWinBanner" hidden></div>
+    </div>
+    <button class="actionBtn" id="clClearBtn">Clear</button>
+  </section>
+
+  <!-- CROSS MATH -->
+  <section id="view-crossmath" class="view" hidden>
+    <div class="statsRow">
+      <span>Time: <strong id="cmTimer">0:00</strong></span>
+      <span>Best: <strong id="cmBest">&ndash;</strong></span>
+    </div>
+    <div class="puzzleBoard cmBoard">
+      <div class="cmGrid" id="cmGrid"></div>
+      <div class="winBanner" id="cmWinBanner" hidden></div>
+    </div>
+    <button class="actionBtn" id="cmClearBtn">Clear</button>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+<script src="colorlink.js"></script>
+<script src="crossword.js"></script>
+<script src="crossmath.js"></script>
+</body>
+</html>
