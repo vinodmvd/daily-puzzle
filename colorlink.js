@@ -33,6 +33,8 @@ const ColorLinkGame = (() => {
   // per-level in-memory state, keyed by level id
   const state = {};
   let timerIntervalId = null;
+  let builtLevelId = null; // which level's DOM cells are currently built
+  let cellEls = []; // cached cell DOM elements for the currently-built level
 
   function idx(r, c, size) { return r * size + c; }
   function rc(i, size) { return [Math.floor(i / size), i % size]; }
@@ -300,24 +302,18 @@ const ColorLinkGame = (() => {
     });
   }
 
-  function render() {
-    renderTabs();
-    const st = getState(currentLevelId);
+  function buildGrid(st) {
     const grid = document.getElementById("clGrid");
-    const winBanner = document.getElementById("clWinBanner");
     grid.style.setProperty("--cl-size", st.puzzle.size);
     grid.innerHTML = "";
+    cellEls = [];
 
     for (let i = 0; i < st.puzzle.total; i++) {
       const cell = document.createElement("div");
       cell.className = "clCell";
       cell.dataset.index = i;
-      const ownerColorId = st.cellOwner[i];
-      const dot = cellDotColor(st.puzzle, i);
 
-      if (ownerColorId !== null) {
-        cell.style.background = st.puzzle.colors[ownerColorId].color;
-      }
+      const dot = cellDotColor(st.puzzle, i);
       if (dot) {
         const marker = document.createElement("div");
         marker.className = "clDot";
@@ -325,8 +321,34 @@ const ColorLinkGame = (() => {
         marker.textContent = String.fromCharCode(65 + dot.id); // A, B, C, ...
         cell.appendChild(marker);
       }
+
       grid.appendChild(cell);
+      cellEls.push(cell);
     }
+    builtLevelId = currentLevelId;
+  }
+
+  // Only touches each cell's background color — never removes/recreates
+  // elements. This is essential: iOS Safari stops delivering further
+  // pointermove events for a touch once the element it started on is
+  // removed from the DOM, which would silently break dragging entirely.
+  function updateGridColors(st) {
+    for (let i = 0; i < st.puzzle.total; i++) {
+      const ownerColorId = st.cellOwner[i];
+      cellEls[i].style.background = ownerColorId !== null ? st.puzzle.colors[ownerColorId].color : "";
+    }
+  }
+
+  function render() {
+    renderTabs();
+    const st = getState(currentLevelId);
+
+    if (builtLevelId !== currentLevelId || cellEls.length !== st.puzzle.total) {
+      buildGrid(st);
+    }
+    updateGridColors(st);
+
+    const winBanner = document.getElementById("clWinBanner");
 
     if (st.solved) {
       const record = st.justSetRecord
@@ -346,8 +368,9 @@ const ColorLinkGame = (() => {
   // ---- interaction ----
   function cellIndexFromPoint(x, y) {
     const el = document.elementFromPoint(x, y);
-    if (!el || !el.classList.contains("clCell")) return null;
-    return parseInt(el.dataset.index, 10);
+    const cellEl = el && el.closest(".clCell");
+    if (!cellEl) return null;
+    return parseInt(cellEl.dataset.index, 10);
   }
 
   function handleStart(cellIndex) {
