@@ -100,7 +100,13 @@ const ColorLinkGame = (() => {
     // and makes full-grid Hamiltonian paths generate reliably even on
     // 9x9 boards. Candidates are a stack (popped from the end), so the
     // lowest-degree option is sorted to the end.
-    function neighborsOf(cell) {
+    //
+    // On top of that, bias toward continuing in the same direction we
+    // just arrived from, whenever that option is roughly as safe as the
+    // most-constrained alternative. This produces long straight runs
+    // with occasional turns — the natural look of a hand-drawn path —
+    // instead of a path that zigzags back and forth across two columns.
+    function neighborsOf(cell, fromCell) {
       const list = rawNeighbors(cell).filter((n) => !visited[n]);
       const withDegree = list.map((n) => ({
         n,
@@ -111,10 +117,28 @@ const ColorLinkGame = (() => {
         [withDegree[i], withDegree[j]] = [withDegree[j], withDegree[i]];
       }
       withDegree.sort((a, b) => b.deg - a.deg);
+
+      if (fromCell !== null && withDegree.length > 1) {
+        const [fr, fc] = rc(fromCell, size);
+        const [cr, cc] = rc(cell, size);
+        const dr = cr - fr, dc = cc - fc;
+        const straightIdx = withDegree.findIndex((x) => {
+          const [nr, nc] = rc(x.n, size);
+          return nr - cr === dr && nc - cc === dc;
+        });
+        if (straightIdx !== -1) {
+          const minDeg = Math.min(...withDegree.map((x) => x.deg));
+          if (withDegree[straightIdx].deg <= minDeg + 1) {
+            const [item] = withDegree.splice(straightIdx, 1);
+            withDegree.push(item); // moves to the end -> tried first
+          }
+        }
+      }
+
       return withDegree.map((x) => x.n);
     }
 
-    const candidateStack = [neighborsOf(start)];
+    const candidateStack = [neighborsOf(start, null)];
     let iterations = 0;
     const MAX_ITER = 400000;
 
@@ -138,9 +162,10 @@ const ColorLinkGame = (() => {
         continue;
       }
 
+      const cameFrom = path[path.length - 1];
       visited[next] = true;
       path.push(next);
-      candidateStack.push(neighborsOf(next));
+      candidateStack.push(neighborsOf(next, cameFrom));
     }
 
     return path;
@@ -192,6 +217,7 @@ const ColorLinkGame = (() => {
         color: CL_PALETTE[c % CL_PALETTE.length],
         dotA: segment[0],
         dotB: segment[segment.length - 1],
+        solution: segment,
       });
     }
 
@@ -214,6 +240,7 @@ const ColorLinkGame = (() => {
         runStart: null, // timestamp when current running segment started
         lastCoinsEarned: null,
         justSetRecord: false,
+        hintsUsed: 0,
       };
     }
     return state[levelId];
@@ -282,6 +309,60 @@ const ColorLinkGame = (() => {
     });
   }
 
+  function pathMatchesSolution(path, solution) {
+    if (path.length !== solution.length) return false;
+    const forward = path.every((cell, i) => cell === solution[i]);
+    const backward = path.every((cell, i) => cell === solution[solution.length - 1 - i]);
+    return forward || backward;
+  }
+
+  // Reveals one color's full correct path at a time (the first color that
+  // isn't already correctly solved). Costs a small coin penalty on the
+  // eventual win, so hints stay useful without trivializing the puzzle.
+  function useHint() {
+    const st = getState(currentLevelId);
+    if (st.solved) return;
+
+    const target = st.puzzle.colors.find(
+      (c) => !pathMatchesSolution(st.paths[c.id], c.solution)
+    );
+    if (!target) return; // everything already correct, nothing to hint
+
+    const targetCells = new Set(target.solution);
+
+    // If another color's (incorrect) path wandered into a cell that
+    // actually belongs to this color's real solution, truncate that
+    // color's path right before the conflict so ownership stays consistent.
+    st.puzzle.colors.forEach((c) => {
+      if (c.id === target.id) return;
+      const path = st.paths[c.id];
+      const conflictIndex = path.findIndex((cell) => targetCells.has(cell));
+      if (conflictIndex !== -1) st.paths[c.id] = path.slice(0, conflictIndex);
+    });
+
+    st.paths[target.id] = target.solution.slice();
+    st.hintsUsed += 1;
+
+    rebuildCellOwners(st);
+
+    if (checkWin(st)) {
+      stopTimer();
+      const elapsedMs = getElapsedMs(st);
+      const cfg = CL_COIN_CONFIG[currentLevelId];
+      const rawCoins = computeCoins(currentLevelId, elapsedMs);
+      const coinsEarned = Math.max(cfg.min, rawCoins - st.hintsUsed * 5);
+      st.solved = true;
+      st.dragging = null;
+      st.lastCoinsEarned = coinsEarned;
+      st.justSetRecord = recordBestTimeIfBetter(currentLevelId, elapsedMs);
+      addCoins(coinsEarned);
+      markCompletedToday(`colorlink-${currentLevelId}`);
+      if (typeof refreshHomeStatuses === "function") refreshHomeStatuses();
+    }
+
+    render();
+  }
+
   // ---- rendering ----
   function isLevelUnlocked(levelId) {
     const idx = CL_LEVELS.findIndex((l) => l.id === levelId);
@@ -336,6 +417,11 @@ const ColorLinkGame = (() => {
       cell.className = "clCell";
       cell.dataset.index = i;
 
+      const pipe = document.createElement("div");
+      pipe.className = "clPipe";
+      cell.appendChild(pipe);
+      cell.pipeEl = pipe;
+
       const dot = cellDotColor(st.puzzle, i);
       if (dot) {
         const marker = document.createElement("div");
@@ -351,14 +437,54 @@ const ColorLinkGame = (() => {
     builtLevelId = currentLevelId;
   }
 
-  // Only touches each cell's background color — never removes/recreates
-  // elements. This is essential: iOS Safari stops delivering further
-  // pointermove events for a touch once the element it started on is
-  // removed from the DOM, which would silently break dragging entirely.
+  function cellNeighbors(index, size) {
+    const [r, c] = rc(index, size);
+    return {
+      up: r > 0 ? idx(r - 1, c, size) : null,
+      down: r < size - 1 ? idx(r + 1, c, size) : null,
+      left: c > 0 ? idx(r, c - 1, size) : null,
+      right: c < size - 1 ? idx(r, c + 1, size) : null,
+    };
+  }
+
+  // Renders each filled cell as a rounded "pipe" segment that only rounds
+  // off on sides that DON'T continue into a same-color neighbor, and
+  // stretches flush against sides that DO — this is what makes the path
+  // read as one continuous connected line rather than separate flat
+  // squares. Never touches element structure, only styles, so it's safe
+  // to call on every drag move.
   function updateGridColors(st) {
+    const size = st.puzzle.size;
+    const INSET = "13%";
     for (let i = 0; i < st.puzzle.total; i++) {
+      const pipe = cellEls[i].pipeEl;
       const ownerColorId = st.cellOwner[i];
-      cellEls[i].style.background = ownerColorId !== null ? st.puzzle.colors[ownerColorId].color : "";
+
+      if (ownerColorId === null) {
+        pipe.style.opacity = "0";
+        continue;
+      }
+
+      const color = st.puzzle.colors[ownerColorId].color;
+      const n = cellNeighbors(i, size);
+      const sameUp = n.up !== null && st.cellOwner[n.up] === ownerColorId;
+      const sameDown = n.down !== null && st.cellOwner[n.down] === ownerColorId;
+      const sameLeft = n.left !== null && st.cellOwner[n.left] === ownerColorId;
+      const sameRight = n.right !== null && st.cellOwner[n.right] === ownerColorId;
+
+      const ROUND = "34%";
+      pipe.style.borderTopLeftRadius = (sameUp || sameLeft) ? "0" : ROUND;
+      pipe.style.borderTopRightRadius = (sameUp || sameRight) ? "0" : ROUND;
+      pipe.style.borderBottomRightRadius = (sameDown || sameRight) ? "0" : ROUND;
+      pipe.style.borderBottomLeftRadius = (sameDown || sameLeft) ? "0" : ROUND;
+
+      pipe.style.top = sameUp ? "0" : INSET;
+      pipe.style.bottom = sameDown ? "0" : INSET;
+      pipe.style.left = sameLeft ? "0" : INSET;
+      pipe.style.right = sameRight ? "0" : INSET;
+
+      pipe.style.background = color;
+      pipe.style.opacity = "1";
     }
   }
 
@@ -466,7 +592,9 @@ const ColorLinkGame = (() => {
     if (checkWin(st)) {
       stopTimer();
       const elapsedMs = getElapsedMs(st);
-      const coinsEarned = computeCoins(currentLevelId, elapsedMs);
+      const cfg = CL_COIN_CONFIG[currentLevelId];
+      const rawCoins = computeCoins(currentLevelId, elapsedMs);
+      const coinsEarned = Math.max(cfg.min, rawCoins - st.hintsUsed * 5);
       st.solved = true;
       st.dragging = null;
       st.lastCoinsEarned = coinsEarned;
@@ -509,6 +637,10 @@ const ColorLinkGame = (() => {
       st.dragging = null;
       rebuildCellOwners(st);
       render();
+    });
+
+    document.getElementById("clHintBtn").addEventListener("click", () => {
+      useHint();
     });
   }
 
