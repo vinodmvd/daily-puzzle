@@ -1,4 +1,4 @@
-const CACHE_NAME = "daily-puzzles-v4";
+const CACHE_NAME = "daily-puzzles-v7";
 const ASSETS = [
   "./",
   "./index.html",
