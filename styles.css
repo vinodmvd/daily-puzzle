@@ -234,6 +234,8 @@ main {
   padding: 20px;
 }
 
+.winBanner[hidden] { display: none; }
+
 .clWinTitle {
   font-family: Georgia, serif;
   font-size: 21px;
