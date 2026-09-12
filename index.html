@@ -95,12 +95,19 @@
       <span>Time: <strong id="xwTimer">0:00</strong></span>
       <span>Best: <strong id="xwBest">&ndash;</strong></span>
     </div>
-    <div class="clueBar" id="xwClueBar">&nbsp;</div>
+    <div class="clueNav">
+      <button class="clueNavBtn" id="xwPrevClue" aria-label="Previous clue">&#8249;</button>
+      <div class="clueBar" id="xwClueBar">&nbsp;</div>
+      <button class="clueNavBtn" id="xwNextClue" aria-label="Next clue">&#8250;</button>
+    </div>
     <div class="puzzleBoard">
       <div class="xwGrid" id="xwGrid"></div>
       <div class="winBanner" id="xwWinBanner" hidden></div>
     </div>
     <input id="xwHiddenInput" class="hiddenInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" />
+    <div class="actionRow">
+      <button class="actionBtn" id="xwHintBtn">Hint</button>
+    </div>
     <div class="clueLists">
       <div class="clueColumn">
         <h3>Across</h3>
@@ -136,11 +143,14 @@
       <span>Time: <strong id="cmTimer">0:00</strong></span>
       <span>Best: <strong id="cmBest">&ndash;</strong></span>
     </div>
-    <div class="puzzleBoard cmBoard">
+    <div id="cmBoard" class="puzzleBoard">
       <div class="cmGrid" id="cmGrid"></div>
       <div class="winBanner" id="cmWinBanner" hidden></div>
     </div>
-    <button class="actionBtn" id="cmClearBtn">Clear</button>
+    <div class="actionRow">
+      <button class="actionBtn" id="cmHintBtn">Hint</button>
+      <button class="actionBtn" id="cmClearBtn">Clear</button>
+    </div>
   </section>
 
 </main>
