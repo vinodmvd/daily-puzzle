@@ -283,21 +283,44 @@ const ColorLinkGame = (() => {
   }
 
   // ---- rendering ----
+  function isLevelUnlocked(levelId) {
+    const idx = CL_LEVELS.findIndex((l) => l.id === levelId);
+    if (idx <= 0) return true;
+    return isCompletedToday(`colorlink-${CL_LEVELS[idx - 1].id}`);
+  }
+
+  function highestUnlockedLevelId() {
+    let unlocked = CL_LEVELS[0].id;
+    for (let i = 1; i < CL_LEVELS.length; i++) {
+      if (isCompletedToday(`colorlink-${CL_LEVELS[i - 1].id}`)) unlocked = CL_LEVELS[i].id;
+      else break;
+    }
+    return unlocked;
+  }
+
   function renderTabs() {
     const tabs = document.getElementById("clLevelTabs");
     tabs.innerHTML = "";
     CL_LEVELS.forEach((level) => {
       const btn = document.createElement("button");
-      btn.className = "levelTab" + (level.id === currentLevelId ? " active" : "");
       const done = isCompletedToday(`colorlink-${level.id}`);
-      btn.textContent = level.label + (done ? " \u2713" : "");
-      btn.addEventListener("click", () => {
-        if (level.id === currentLevelId) return;
-        stopTimer();
-        currentLevelId = level.id;
-        render();
-        startTimerFor(currentLevelId);
-      });
+      const locked = !isLevelUnlocked(level.id);
+      btn.className = "levelTab"
+        + (level.id === currentLevelId ? " active" : "")
+        + (locked ? " locked" : "");
+      btn.disabled = locked;
+      btn.innerHTML = level.label
+        + (done ? " \u2713" : "")
+        + (locked ? ' <span class="lockIcon">&#128274;</span>' : "");
+      if (!locked) {
+        btn.addEventListener("click", () => {
+          if (level.id === currentLevelId) return;
+          stopTimer();
+          currentLevelId = level.id;
+          render();
+          startTimerFor(currentLevelId);
+        });
+      }
       tabs.appendChild(btn);
     });
   }
@@ -340,6 +363,7 @@ const ColorLinkGame = (() => {
   }
 
   function render() {
+    if (!isLevelUnlocked(currentLevelId)) currentLevelId = highestUnlockedLevelId();
     renderTabs();
     const st = getState(currentLevelId);
 
